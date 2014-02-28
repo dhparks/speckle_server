@@ -1,0 +1,42 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+
+<title>Error Loading Data</title>
+
+<style>
+#container {
+        left:50%;
+	margin:0 0 0 -200px;
+        display:inline-block;
+	position:absolute;
+        width:400px;
+    }
+    
+#sadbaby {
+    width:306px;
+    height:276px;
+    margin:auto
+}
+
+p.error {color:rgb(255,0,0)}
+</style>
+
+
+</head>
+<body>
+    <div id="container">
+    <div id="sadbaby"><img src={{img}}></div>
+    <p></p>
+    
+    You have been redirected to this page because there was an error {{occasion}}. The following error message was generated:
+    <p class="error">
+    {{ error }}
+    {% if backend %}
+    <br>Backend: {{ backend }}
+    {% endif %}
+    </p>
+    If the above error message is empty or clearly incorrect, please send the data to dhparks@lbl.gov as this probably indicates a problem with the web interface.
+    </div>
+
+</body>

@@ -1,0 +1,6 @@
+/static/xpcs/csv/*
+/static/xpcs/images/*
+/static/imaging/csv/*
+/static/imaging/fits/*
+/static/imaging/images/*
+/data/*
