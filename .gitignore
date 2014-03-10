@@ -3,4 +3,5 @@
 /static/imaging/csv/*
 /static/imaging/fits/*
 /static/imaging/images/*
-/data/*
+/data/uploaded/
+/data/experiment\ mirror/
