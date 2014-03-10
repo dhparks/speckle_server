@@ -288,9 +288,9 @@ def dispatch_cmd(project,cmd):
 def serve_sad_baby(x,y):
     return send_from_directory('.','static/error/sadbaby%s.jpg'%y)
         
-allowed_exts  = set(['fits',])
-app.config['UPLOAD_FOLDER'] = './data'
-app.config['MAX_CONTENT_LENGTH'] = 1024**3
+allowed_exts  = config.ALLOWED_EXTS
+app.config['UPLOAD_FOLDER'] = config.UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
 
 # for session management
 import os
@@ -302,4 +302,3 @@ if __name__ == '__main__':
     projects  = [x.split('/')[-1].split('.html')[0] for x in glob.glob('static/html/*.html')]
     app.run(host="0.0.0.0")
     
-           
