@@ -7,36 +7,32 @@ import Image
 import scipy
 
 # common libs
+from basic_backend import basicBackend
 from speckle import io, xpcs, fit, wrapping
 
 # from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg # turn this on to embed a matplotlib Figure object in a Tk canvas instance
 int_types = (int,np.int8,np.int16,np.int32,np.int64)
 
-class backend():
+class backend(basicBackend):
     """ Class for xpcs methods, intended for use with graphical interface.
     However, can also be used for commandline or script operations. """
     
     def __init__(self,session_id,gpu_info=None):
 
+        basicBackend.__init__(self,session_id,gpu_info)
+
         self.regions = {}
         self.form ='decayexp'
-        self.session_id = session_id
-        self.set_gpu(gpu_info)
         
         self.cmds = {
             'remove':    self._flaskRemove,
-            'query':     self._flaskQuery,
             'new':       self._flaskNew,
             'purge':     self._flaskPurge,
             'calculate': self._flaskCalculate,
+            'query':     self._flaskQuery
         }
 
-    def set_gpu(self,gpu_info):
-        self.gpu = gpu_info
-        if gpu_info != None: self.use_gpu = True
-        if gpu_info == None: self.use_gpu = False
-
-    def load_data(self,project,folder):
+    def load_data(self,project,filename):
         
         """ Get all the relevant information about the file at path. Because
         XPCS datasets can be very large (1GB+) and only a portion of the data
@@ -91,16 +87,14 @@ class backend():
             self.data_size = self.first_frame.shape[0]
 
         self.data_id = self._new_id()
-        old_name     = '%s/%sdata_session%s.fits'%(folder,project,self.session_id)
-        new_name     = '%s/%sdata_session%s_id%s.fits'%(folder,project,self.session_id,self.data_id)
-        os.rename(old_name,new_name)
-
-        self.data_path = new_name
-        self.data_name = new_name
+        self.data_path = filename
+        self.data_name = filename
         
         # first, check the shape and get the number of frames
-        self.data_shape = io.get_fits_dimensions(new_name)
+        self.data_shape = io.get_fits_dimensions(self.data_path)
         self.frames     = self.data_shape[0]
+        
+        print self.data_shape
         
         if len(self.data_shape) !=  3 or (len(self.data_shape) == 3 and self.data_shape[0] == 1):
             raise TypeError("Data is 2 dimensional")
@@ -249,9 +243,6 @@ class backend():
         g2_array          = _g2array()
         _write_output()
 
-    def _new_id(self):
-        return str(int(time.time()*10))
-
     def check_data(self,data_name):
         
         # Check the incoming data for the attributes necessary for imaging
@@ -286,10 +277,7 @@ class backend():
             
         # return a json response
         return {'result':"removed"}
-    
-    def _flaskQuery(self,args,json,project):
-        return {'sessionId':self.session_id,'dataId':self.data_id,'nframes':self.frames,'size':self.data_size}
-        
+
     def _flaskNew(self,args,json,project):
         self.update_region(json['uid'],json['coords'])
         return {'result':'added region with uid %s'%self.newest}

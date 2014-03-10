@@ -343,6 +343,7 @@ var start = function () {
 	$.getJSON(
             'xpcs/query', {},
             function(returned) {
+		console.log(returned)
 		// copy the data from returned into gui.data
 		Object.keys(returned).forEach(function(key) {gui.data[key] = returned[key]});
 		gui.data.exists = true;

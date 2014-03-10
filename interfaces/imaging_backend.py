@@ -8,44 +8,31 @@ import Image
 import math
 import uuid
 
+from basic_backend import basicBackend
 from speckle import wrapping, shape, io, conditioning, propagate, phasing, masking
 
 io.set_overwrite(True)
 
-class backend():
+class backend(basicBackend):
 
     def __init__(self,session_id,gpu_info=None):
     
         # this class receives gpu info from the flask_server, which
         # is the original instantiator of the gpu context.
+        
+        basicBackend.__init__(self,session_id,gpu_info)
 
-        self.session_id = session_id
-        print "imaging session id %s"%self.session_id
-        
-        self.reconstructions = {}
-        self.modulus = None
-        self.support = None
-        self.loaded  = False
-        
-        self.set_gpu(gpu_info)
-        
-        # these are commands that the flask server can issue
+        # instantiate the phasing machine
+        self.machine = phasing.phasing(gpu_info=gpu_info)
+
+        # these are commands that the flask server can issue to this
+        # particular backend
         self.cmds = {
             'query':      self._flaskQuery,
             'propagate':  self._flaskPropagate,
             'download':   self._flaskDownload,
             'makesupport':self._flaskMakeSupport,
             'reconstruct':self._flaskReconstruct}
-
-    def set_gpu(self,gpu_info):
-        
-        if gpu_info != None:
-            self.use_gpu = True
-            self.gpu     = gpu_info
-        else:
-            self.use_gpu = False
-            
-        self.machine = phasing.phasing(gpu_info=gpu_info)
 
     def make_blocker(self,power):
         
@@ -69,7 +56,7 @@ class backend():
             
             self.blocker = 1-shape.circle(self.data_shape,power)
         
-    def load_data(self,project,folder,blocker=0.8):
+    def load_data(self,project,filename,blocker=0.8):
         # open and prepare data for display. depending on project,
         # the data gets prepared in different ways. for example, when the
         # project is fth, the central maximum gets blockered more extensively
@@ -112,16 +99,13 @@ class backend():
             return numpy.fft.fftshift(numpy.fft.fft2(rolled)), rolled
         
         # assign a unique id to the current data. rename the file from $project$_data.fits
-        self.data_id = self._new_id()
-        old_name     = '%s/%sdata_session%s.fits'%(folder,project,self.session_id)
-        new_name     = '%s/%sdata_session%s_id%s.fits'%(folder,project,self.session_id,self.data_id)
-        os.rename(old_name,new_name)
-        self.file_name = new_name
+        self.data_id   = self._new_id()
+        self.file_name = filename
 
         # open the data and get the shape. if the data is trivially 3d,
         # convert trivially to 2d. if the data is substantively 3d, convert
         # to 2d by averaging along the frame axis.
-        fourier_data = io.open(new_name).astype(numpy.float32)
+        fourier_data = io.open(self.file_name).astype(numpy.float32)
         if fourier_data.ndim == 3:
             if fourier_data.shape[0] == 1: fourier_data = fourier_data[0]
             if fourier_data.shape[0] >= 2: fourier_data = numpy.average(fourier_data,axis=0)
@@ -153,6 +137,12 @@ class backend():
             c0 = int(r['cmin'])
             c1 = int(r['cmax'])
             self.support[r0:r1,c0:c1] = 1
+
+        print "support"
+        print self.support.sum()
+        print self.support.shape
+        
+        io.save('support test.fits',self.support)
 
         self.loaded = False
         self.reconstruction = {}
@@ -410,6 +400,8 @@ class backend():
         r_sum      = numpy.sum(savebuffer[:-1],axis=0)
         savebuffer[-1] = r_average
         
+        io.save('savebuffer.fits',savebuffer)
+        
         # now save the average formed above. this will get displayed in the
         # front end. must be embedded, then resized to 300x300 (subject to change?)
         self.r_id = self._new_id()
@@ -445,23 +437,10 @@ class backend():
         # success! data seems ok to basic checks
         return True, None
 
-    def _new_id(self):
-        # using time instead of uuid because the gui
-        # needs ids that are sequential
-        return str(time.time()).replace('.','')[:12]
-
     # _flaskWhatever are intended as functions in the backend
     # which parse the json and args into a form usable by
     # the normal commands. THESE SHOULD ALWAYS RETURN A DICTIONARY
-    
-    def _flaskQuery(self,args,json,project):
-        tr = {}
-        tr['sessionId'] = self.session_id
-        tr['dataId']    = self.data_id
-        tr['hasgpu']    = self.use_gpu
-        tr['size']      = self.data_size
-        return tr
-    
+
     def _flaskPropagate(self,args,json,project):
         
         # break the request into a parameters dictionary

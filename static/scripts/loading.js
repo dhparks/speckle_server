@@ -1,53 +1,82 @@
 // script to manage the loading page
-
 var selectedProject = null;
-var mouseoverAlpha = 0.2
-var selectedAlpha  = 0.8
 
-// whenever a new project is added to the analysis, update this dictionary
-var colors = {'fth':[255,78,0],'cdi':[0,200,0],'xpcs':[39,114,255]}
-
-// define a function to control the value of the rbga property
-var changeColor = function(name,alpha,duration) {
-    duration = duration || 100;
-    var color = 'rgba('+colors[name].join(',')+','+alpha+')';
-    //$('#'+name).css('background-color', color);
-    d3.select('#'+name).transition().duration(duration).style('background-color',color)
-}
-
-// select the experiments, add behavior
+// experiment selection behavior
 $('#experiments div').each(function () {
-    
-    $(this).mouseenter(function () {
-	if (selectedProject == this.id) { }
-	else {changeColor(this.id,mouseoverAlpha);}}
-    );
+
+    var deselect = function () {
+	var t = $("#"+selectedProject+'-selected');
+	t.attr("id",t.attr("id").split('-selected')[0])
+	selectedProject = null;
+	$('#fileinput').attr("name","");
+	$('#expreadout').text("1. Select an experiment. Selected: None");
+    }
+
+    var select = function (tid,ptid) {
+	selectedProject = tid;
+	$(ptid).attr("id",tid+'-selected')
+	$("#fileinput").attr("name",tid);
+	$('#expreadout').text("1. Select an experiment. Selected: "+tid);
+    }
     
     $(this).click(function () {
-	if (selectedProject == this.id) {
-	    changeColor(this.id,0);
-	    selectedProject = null;
-	    $('#fileinput').attr("name","");
-	    $('#readout').text("Selected experiment: None");
-	}
-	
-	else {
-	    changeColor(this.id,selectedAlpha,200);
-	    if (selectedProject != null) {changeColor(selectedProject,0,300);}
-	    selectedProject = this.id;
-	    $("#fileinput").attr("name",this.id);
-	    $('#readout').text("Selected experiment: "+this.id);
-	}
-    });
-	
-    $(this).mouseleave(function () {
-	if (selectedProject == this.id) { }
-	else {changeColor(this.id,0.0,500);}
+	var tid = this.id, ptid = '#'+this.id; sp = selectedProject
+	if (sp != null) {deselect()};
+	if (sp+'-selected' != tid) {select(tid,ptid)};
     });
 
 });
 
-var validateForm = function () {
+// file tree
+selectedId = null;
+fileName = null;
+    
+$(document).ready(
+    function() {$('#fileTree').fileTree({},
+	function(id) {
+	    
+	    if (selectedId === id) {
+		selectedId = null;
+		fileName   = null;
+		$('#'+id).children().removeClass("selectedFile")
+	    }
+	    
+	    else {
+		
+		if (selectedId != null) {$('#'+selectedId).children().removeClass("selectedFile")}
+		
+		selectedId = id;
+		fileName = $('#'+id).children().attr('rel');
+		$('#'+id).children().addClass("selectedFile")
+	    }
+
+	    });
+    })
+
+// attach an action to the remoteselect
+$('#remotesubmitter').click(function () {
+    
+    // verify a project exists. if it does, get the
+    // filename and send it to the server
+    if (selectedProject === null) {alert("You must select an experiment first")}
+    if (fileName === null) {alert("You must select a data set first")}
+    
+    if (selectedProject != null && fileName != null) {
+
+	$.ajax({
+	    url: "/remoteload",
+	    type: 'POST',
+	    data: JSON.stringify({'project':selectedProject,'fileName':fileName}),
+	    contentType: 'application/json; charset=utf-8',
+	    dataType: 'json',
+	    async: true,
+	    success: function(returned) {window.location.href = returned.redirect;}
+	});
+    }
+
+})
+
+var validateUpload = function () {
     
     // before submitting, we need to verify that
     // 1. a project has been selected

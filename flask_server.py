@@ -27,6 +27,7 @@ except ImportError:
     use_gpu = False
     
 # code for backends; gets re-instantiated for each session
+import server_config as config
 from interfaces import xpcs_backend
 from interfaces import imaging_backend
 
@@ -41,22 +42,21 @@ def manage_session():
     def _delete_old_files(ct):
 
         # define the expiration time constant
-        life_hours = 8
-        expired_at = time.time()-3600*life_hours
+        expired_at = time.time()-3600*config.LIFETIME
         
         # delete old files (currently they live for %life_hours% hours)
         import glob
         files, ks, ds, kept, deleted = [], [], [], 0, 0
-        for path in ('static/*/images/*session*.*','static/*/csv/*session*.*','data/*session*.*'): files += glob.glob(path)
-        fmt_str = r'(cdi|fth|xpcs)data_session([0-9]*)_id([0-9]*)(.*).fits'
+        for path in ('static/*/images/*session*.*','static/*/csv/*session*.*',config.UPLOAD_FOLDER+'/*session*.*'): files += glob.glob(path)
+        fmt_str = r'(cdi|fth|xpcs)data_session([0-9]*)_id([0-9]*)(.*).(fits|zip|csv|png|jpg)'
 
         for f in files:
             
             # get the session id for the file
             try:
-                project, session_id, data_id, extra = re.match(fmt_str,f).groups()
+                project, session_id, data_id, extra, fmt = re.match(fmt_str,f).groups()
             except AttributeError:
-                project, session_id, data_id, extra = None, None, None, None
+                project, session_id, data_id, extra, fmt = None, None, None, None, None
             
             # see how old the file is. if too old, delete it.
             if getctime(f) < expired_at and extra != '_crashed':
@@ -71,9 +71,8 @@ def manage_session():
         # delete old sessions from the sessions dictionary. this removes the gpu
         # contexts, backends, etc.
         tx = time.time()
-        session_life_hours = 8
         for sk in sessions.keys():
-            if tx-sessions[sk]['last'] > 60*60*session_life_hours:
+            if tx-sessions[sk]['last'] > 3600*config.LIFETIME:
                 del sessions[sk]
                 
     def _make_new_session():
@@ -116,7 +115,7 @@ def allowed_file(name):
     
     if '.' in name:
         ext = name.rsplit('.',1)[1]
-        if ext in allowed_exts:
+        if ext in config.ALLOWED_EXTS:
             allowed = True
         else:
             error = "Uploaded file has wrong extension (%s). Must be .fits"%ext
@@ -159,7 +158,7 @@ def upload_file():
         if allowed:
             
             filename = secure_filename(f.filename)
-            save_to  = os.path.join(app.config['UPLOAD_FOLDER'], '%sdata_session%s.fits'%(project,s_id))
+            save_to  = os.path.join(config.UPLOAD_FOLDER, '%sdata_session%s.fits'%(project,s_id))
             f.save(save_to)
             
             # get the appropriate backend
@@ -177,7 +176,7 @@ def upload_file():
             checked, error = backend.check_data(save_to)
             print checked, error
             if checked:
-                backend.load_data(project,app.config['UPLOAD_FOLDER'])
+                backend.load_data(project,save_to)
                 return redirect('/'+project)
             
         # if we're here, there was an error with the data. do three things
@@ -198,7 +197,8 @@ def upload_file():
                 f.close()
 
             # 3. send the user to the error page
-            kwargs = {'error':error,'backend':backend_id,'occasion':"checking the uploaded data"}
+            kwargs = {'error':error,'backend':backend_id,'occasion':"checking the uploaded data","img":random.choice(sadbabies)}
+            kwargs['img'] = random.choice(sadbabies)
             return render_template('error.html',**kwargs)
 
 # the rest of the decorators are switchboard functions which take a request
@@ -206,9 +206,45 @@ def upload_file():
 @app.route('/')
 def serve_landing():
     # now send the landing page
-    return send_from_directory(".","static/html/demo.html")
+    manage_session()
+    return send_from_directory(".","static/html/landing.html")
 
-@app.route('/<project>')
+@app.route('/error',methods=['GET',])
+def serve_error():
+    kwargs = sessions[session['s_id']]['error_kwargs']
+    return render_template('error.html',**kwargs)
+
+@app.route('/filetree',methods=['POST',])
+def get_directory():
+    manage_session()
+    from_backend = sessions[session['s_id']]['backendi'].listDirectory(request.json['dir'])
+    return jsonify(**from_backend)
+
+@app.route('/remoteload',methods=['POST',])
+def remote_load():
+    
+    # parse the json
+    project  = request.json['project']
+    fileName = request.json['fileName']
+    
+    # get the backend
+    backend = get_backend(project)
+    
+    # check the data. if it seems OK, load it
+    # and redirect to the project page.
+    checked, error = backend.check_data(fileName)
+    if checked:
+        backend.load_data(project,fileName)
+        print "redirecting to %s"%project
+        return jsonify(**{'redirect':'/'+project})
+    
+    else:
+        sessions[session['s_id']]['error_kwargs'] = {'error':error,'backend':project,'occasion':"checking the uploaded data",'img':random.choice(sadbabies)}
+        print "here!"
+        print session['s_id']
+        return jsonify(**{'redirect':'/error'})
+    
+@app.route('/<project>',methods=['GET',])
 def serve_project(project):
 
     if project not in projects:
@@ -228,8 +264,13 @@ def serve_project(project):
 @app.route('/<project>/<cmd>',methods=['GET','POST'])
 def dispatch_cmd(project,cmd):
     
+    print project, cmd
+    
     # dispatch commands to the backend
     backend = get_backend(project)
+    
+    print project
+    
     if backend == None:
         error = "expired session"
         kwargs = {'error':"expired session",'occasion':'executing a command'}
@@ -259,5 +300,6 @@ app.permanent_session_lifetime = timedelta(minutes=60*8)
 if __name__ == '__main__':
     sadbabies = glob.glob('static/error/sadbaby*.jpg')
     projects  = [x.split('/')[-1].split('.html')[0] for x in glob.glob('static/html/*.html')]
-    app.run(host="0.0.0.0",debug=False)
+    app.run(host="0.0.0.0")
     
+           

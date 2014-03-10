@@ -1,0 +1,38 @@
+UL.fileTree {
+	font-family: Verdana, sans-serif;
+	font-size: 12px;
+	line-height: 18px;
+	padding: 0px;
+	margin: 0px;
+}
+
+UL.fileTree LI {
+	list-style: none;
+	padding: 0px;
+	padding-left: 20px;
+	margin: 0px;
+	white-space: nowrap;
+}
+
+UL.fileTree A {
+	color: #333;
+	text-decoration: none;
+	display: block;
+	padding: 0px 2px;
+}
+
+UL.fileTree A:hover {
+	background: #5174e7;
+}
+
+.fileTree .selectedFile {background: #e7bb28}
+
+/* Core Styles */
+.fileTree LI.directory { background: url(../landing/directory.png) left top no-repeat; }
+.fileTree LI.expanded { background: url(../landing/folder_open.png) left top no-repeat; }
+.fileTree LI.file { background: url(../landing/file.png) left top no-repeat; }
+.fileTree LI.wait { background: url(../landing/spinner.gif) left top no-repeat; }
+
+/* File Extensions. Since speckle server only cares about .fits, we only have one line!*/
+/* For other file types, see jqueryFileTree project page. */
+.fileTree LI.ext_fits { background: url(../landing/file.png) left top no-repeat; }

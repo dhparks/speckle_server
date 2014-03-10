@@ -8,7 +8,7 @@ https://sites.google.com/a/lbl.gov/coherent-scattering-beamline/
 Author: Daniel Parks (dhparks@lbl.gov)
 
 """
-__version_info__ = ('0', '1', '0')
+__version_info__ = ('0', '2', '0')
 __version__ = '.'.join(__version_info__)
 
 # if you make a new file/module name, put it here.  These are alphabetized.
