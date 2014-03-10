@@ -2,7 +2,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
 
-<title>Analysis Selection Page</title>
+<title>Speckle Analysis Server</title>
 <style>
 
     #container {
@@ -129,8 +129,17 @@
 	
 	<div class="instructions uploading fullwidth" id="datareadout">
 	2: Select data by one of two methods<br>
-	a: Upload a file from your computer<br>
-	b: Use data already uploaded to server</div>
+	a: Use data already uploaded to server<br>
+	b: Upload a file from your computer</div>
+	
+	<div class="uploading fullwidth" id="uploader">
+	    Use file on server
+	    <hr>
+	    <div id="fileTree" class="demo"></div>
+	    <hr>
+	    <button id="remotesubmitter" type="button">Analyze</button>
+	    </form>
+	</div>
 	
 	<div class="uploading fullwidth" id="fileSelection">
 	    Upload local file<br>
@@ -142,14 +151,7 @@
 	    </form>
 	</div>
 	
-	<div class="uploading fullwidth" id="uploader">
-	    Use file on server
-	    <hr>
-	    <div id="fileTree" class="demo"></div>
-	    <hr>
-	    <button id="remotesubmitter" type="button">Analyze</button>
-	    </form>
-	</div>
+
 	
     </div>
 

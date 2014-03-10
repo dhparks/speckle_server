@@ -22,10 +22,10 @@ UL.fileTree A {
 }
 
 UL.fileTree A:hover {
-	background: #5174e7;
+	background: #64bdff;
 }
 
-.fileTree .selectedFile {background: #e7bb28}
+.fileTree .selectedFile {background: #ffd138}
 
 /* Core Styles */
 .fileTree LI.directory { background: url(../landing/directory.png) left top no-repeat; }
@@ -36,3 +36,4 @@ UL.fileTree A:hover {
 /* File Extensions. Since speckle server only cares about .fits, we only have one line!*/
 /* For other file types, see jqueryFileTree project page. */
 .fileTree LI.ext_fits { background: url(../landing/file.png) left top no-repeat; }
+.fileTree LI.selectedFile { background: url(../landing/file_selected.png) left top no-repeat; }

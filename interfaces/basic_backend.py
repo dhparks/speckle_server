@@ -49,6 +49,8 @@ class basicBackend(object):
             r = ['<ul class="fileTree" style="display: none;">']
              
             directory = urllib2.unquote(directory)
+            
+            folders, files = [], []
              
             # require that d have the correct root.
             if self.DATA_ROOT not in directory.split(os.sep)[0]:
@@ -59,12 +61,16 @@ class basicBackend(object):
                 path = os.path.join(directory,entry)
                 if os.path.isdir(path):
                     kw = {'t':'dir','path':path,'f':entry}
-                    r.append(_build(**kw))
+                    folders.append(kw)
                 else:
                     ext = _getExt(entry)
                     if ext != None and 'crashed' not in entry:
                         kw = {'t':'file','path':path,'f':entry,'ext':ext}
-                        r.append(_build(**kw))
+                        files.append(kw)
+                        
+            folders.sort(key = lambda x: x['f'])
+            files.sort(key = lambda x: x['f'])
+            r += [_build(**f) for f in folders+files]
                     
             # done
             r.append('</ul>')
