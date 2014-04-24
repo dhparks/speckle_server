@@ -4,13 +4,11 @@ import os
 import uuid
 import shutil
 from os.path import getctime
-
 import re
-
 import time
 from datetime import timedelta
-import speckle, numpy
-
+import speckle
+import numpy
 import glob
 import random
 
@@ -34,6 +32,7 @@ from interfaces import imaging_backend
 # concurrent user sessions are managed through a dictionary which holds
 # the backends and the time of last activity
 sessions = {}
+
 def manage_session():
     # see if there is currently a session attached to the incoming request.
     # if not, assign one. the way to check for a session is to try to get a
@@ -89,14 +88,15 @@ def manage_session():
         backendi = imaging_backend.backend(session_id=s_id,gpu_info=gpu_info)
     
         # store these here in python; can't be serialized into the cookie!
-        sessions[s_id]             = {}
+        sessions[s_id] = {}
+        sessions[s_id]['fileMirror'] = {}
         sessions[s_id]['backendx'] = backendx
         sessions[s_id]['backendi'] = backendi
-        sessions[s_id]['last']     = time.time()
-    
-        # store these in the cookie?
+        sessions[s_id]['last'] = time.time()
+
+        # store these in the cookie
         session.permanant = True
-        session['s_id']   = s_id
+        session['s_id'] = s_id
         print "session %s"%s_id
         
         return t
@@ -126,6 +126,8 @@ def allowed_file(name):
 
 def get_backend(project,purge=False):
     m = {'fth':'backendi','cdi':'backendi','xpcs':'backendx'}
+    if project == 'all':
+        return list(set(m.values()))
     try:
         backend = sessions[session['s_id']][m[project]]
         sessions[session['s_id']]['last'] = time.time()
@@ -154,30 +156,50 @@ def serve_error():
 @app.route('/filetree',methods=['POST',])
 def get_directory():
     manage_session()
-    from_backend = sessions[session['s_id']]['backendi'].listDirectory(request.json['dir'])
+    from_backend = sessions[session['s_id']]['backendi'].listDirectory(request.json,demo=True)
+    sessions[session['s_id']]['fileMirror'].update(from_backend['forMirror'])
+    del from_backend['forMirror']
     return jsonify(**from_backend)
 
 @app.route('/remoteload',methods=['POST',])
 def remote_load():
     
+    def _manageFile():
+        fm = sessions[session['s_id']]['fileMirror']
+        
+        # if the requested file doesn't exist, make a copy
+        jname = request.json['fileName']
+        rname = fm[jname]['path']
+        lname = rname.replace(config.DATA_ROOT,config.DATA_MIRROR)
+        
+        # copy the file from remote to local
+        if not fm[jname]['local']:
+            print "not local; copying"
+            backend.mirrorFile(rname,lname)
+            fm[jname]['local'] = True
+
+        return lname
+
     # parse the json
-    project  = request.json['project']
-    fileName = request.json['fileName']
+    project = request.json['project']
     
     # get the backend
-    backend = get_backend(project)
+    backend  = get_backend(project)
+    backendi = get_backend('fth') 
+    
+    # figure out where the file is, and if we need to create a local copy
+    localFileName = _manageFile()
     
     # check the data. if it seems OK, load it
     # and redirect to the project page.
-    checked, error = backend.check_data(fileName)
+    checked, error = backend.check_data(localFileName)
     if checked:
-        backend.load_data(project,fileName)
+        backend.load_data(project,localFileName)
         print "redirecting to %s"%project
         return jsonify(**{'redirect':'/'+project})
     
     else:
         sessions[session['s_id']]['error_kwargs'] = {'error':error,'backend':project,'occasion':"checking the uploaded data",'img':random.choice(sadbabies)}
-        print session['s_id']
         return jsonify(**{'redirect':'/error'})
     
 @app.route('/<project>',methods=['GET',])
@@ -199,17 +221,15 @@ def serve_project(project):
 
 @app.route('/<project>/<cmd>',methods=['GET','POST'])
 def dispatch_cmd(project,cmd):
-    
-    print project, cmd
+
+    occ = 'executing a command'
     
     # dispatch commands to the backend
     backend = get_backend(project)
-    
-    print project
-    
+
     if backend == None:
         error = "expired session"
-        kwargs = {'error':"expired session",'occasion':'executing a command'}
+        kwargs = {'error':"expired session",'occasion':occ}
         return error_page(kwargs)
 
     try:
@@ -217,9 +237,9 @@ def dispatch_cmd(project,cmd):
         return jsonify(**from_backend)
     
     except KeyError:
-        kwargs = {'error':"illegal command "+cmd,'occasion':'executing a command'}
+        kwargs = {'error':"illegal command "+cmd,'occasion':occ}
         return error_page(kwargs)
-    
+
 @app.route('/<path:x>/sadbaby<int:y>.jpg')
 def serve_sad_baby(x,y):
     return send_from_directory('.','static/error/sadbaby%s.jpg'%y)
@@ -236,5 +256,5 @@ app.permanent_session_lifetime = timedelta(minutes=60*8)
 if __name__ == '__main__':
     sadbabies = glob.glob('static/error/sadbaby*.jpg')
     projects  = [x.split('/')[-1].split('.html')[0] for x in glob.glob('static/html/*.html')]
-    app.run(host="0.0.0.0",port=5001)
+    app.run(host="0.0.0.0",port=5001,debug=True)
     

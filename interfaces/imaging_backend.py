@@ -9,7 +9,9 @@ import math
 import uuid
 
 from basic_backend import basicBackend
-from speckle import wrapping, shape, io, conditioning, propagate, phasing, masking
+from speckle import wrapping, shape, io, conditioning, phasing, masking, propagate
+
+from multiprocessing import Pool
 
 io.set_overwrite(True)
 
@@ -84,6 +86,7 @@ class backend(basicBackend):
                 val.save('./static/imaging/images/ifth_session%s_id%s_%s_%s.jpg'%(self.session_id,self.data_id,self.blocker_power,key))
 
         def _embed():
+            print self.fourier_data.shape
             if self.fourier_data.shape[0] != self.fourier_data.shape[1]:
                 g   = max(self.fourier_data.shape)
                 new = numpy.zeros((g,g),numpy.float32)
@@ -107,8 +110,8 @@ class backend(basicBackend):
         # to 2d by averaging along the frame axis.
         fourier_data = io.open(self.file_name).astype(numpy.float32)
         if fourier_data.ndim == 3:
-            if fourier_data.shape[0] == 1: fourier_data = fourier_data[0]
-            if fourier_data.shape[0] >= 2: fourier_data = numpy.average(fourier_data,axis=0)
+            if   fourier_data.shape[0] == 1: fourier_data = fourier_data[0]
+            elif fourier_data.shape[0] >= 2: fourier_data = numpy.average(fourier_data,axis=0)
         self.fourier_data = fourier_data
         
         # if not square, embed in a square array
@@ -156,40 +159,38 @@ class backend(basicBackend):
         print params
         
         def _slice():
-            # from the parameters, calculate and slice the selected data pixels
-            if project == 'fth':
-                r0 = int(params['rmin'])
-                r1 = int(params['rmax'])
-                c0 = int(params['cmin'])
-                c1 = int(params['cmax'])
-                if (r1-r0)%2 == 1: r1 += 1
-                if (c1-c0)%2 == 1: c1 += 1
-                d  = self.rs_data[r0:r1,c0:c1]
+            
+            r0 = int(params['rmin'])
+            r1 = int(params['rmax'])
+            c0 = int(params['cmin'])
+            c1 = int(params['cmax'])
+            
+            print r0, r1, c0, c1
 
-            if project == 'cdi':
-                r, c = self.reconstructions[params['round']].shape
-                r0 = int(params['rmin'])
-                r1 = int(params['rmax'])
-                c0 = int(params['cmin'])
-                c1 = int(params['cmax'])
-                if (r1-r0)%2 == 1: r1 += 1
-                if (c1-c0)%2 == 1: c1 += 1
-                if r1 > r: r1 += -1
-                if c1 > c: c1 += -1
+            r1 += (r1-r0)%2
+            c1 += (c1-c0)%2
 
-                d = self.reconstructions[params['round']][r0:r1,c0:c1]
-
-                # for odd sized arrays, embed the slice in a larger
-                # array. we do this instead of incrementing the
-                # slice coordinates to avoid an IndexError
-                d2r = d.shape[0] + d.shape[0]%2
-                d2c = d.shape[1] + d.shape[1]%2
-                if (d2r, d2c) != d.shape:
-                    d2 = numpy.zeros((d2r,d2c),d.dtype)
-                    d2[:d.shape[0],:d.shape[1]] = d
-                    d = d2
+            if project == 'fth': data = self.rs_data
+            if project == 'cdi': data = self.reconstructions[params['round']]
+            
+            r,c = data.shape
+            if r1 > r: r1 += -1
+            if c1 > c: c1 += -1
+            
+            data = data[r0:r1,c0:c1]
+            
+            # for odd sized arrays, embed the slice in a larger
+            # array. we do this instead of incrementing the
+            # slice coordinates to avoid an IndexError
+            d2r = data.shape[0] + data.shape[0]%2
+            d2c = data.shape[1] + data.shape[1]%2
+            
+            if (d2r, d2c) != data.shape:
+                data2 = numpy.zeros((d2r,d2c),data.dtype)
+                data2[:data.shape[0],:data.shape[1]] = data
+                return data2
                 
-            return d
+            return data
         
         def _save_acutance(z):
             acutancef = open('static/imaging/csv/acutance_session%s_id%s.csv'%(self.session_id,self.bp_id),'w')
@@ -211,7 +212,16 @@ class backend(basicBackend):
                 diff = gx*gy-z
                 return (gx, gy, diff)
             
+            def _toImage(array):
+                return smp.toimage(numpy.abs(array))
+            
             if isinstance(images, numpy.ndarray):
+   
+                #workers = Pool(4)
+                #frames  = [x for x in images]
+                #images  = workers.map(_imageConvertMP,frames)
+                
+                
                 images = [smp.toimage(numpy.abs(i)) for i in images]
 
             imgx, imgy = images[0].size
@@ -283,7 +293,7 @@ class backend(basicBackend):
         z  = _make_z(params['zmin'], params['zmax'])
 
         data, mask = _embed(d,params['apodize'])
-        
+
         # propagate and calculate acutance. normalize the acutance to max = 1
         pd = propagate.propagate_distances
         self.propagated, self.p_images = pd(data,z*1e-6,e,p,subregion=sr,im_convert=True,silent=False,gpu_info=self.gpu)
@@ -426,8 +436,11 @@ class backend(basicBackend):
             error = "couldnt get fits file dimensions; file may be invalid"
             return False, error
         
-        if len(data_shape) not in (2,):
-            error = "data is not 2d; instead, is %sd"%len(data_shape)
+        bad_shape = False
+        if len(data_shape) not in (2,): bad_shape = True
+        if len(data_shape) == 3 and data_shape[0] == 1: bad_shape = False
+        if bad_shape:
+            error = "data is not 2d; instead, is %sd (shape %s)"%(len(data_shape),(data_shape))
             return False, error
         
         if data_shape[-1] != data_shape[-2]:
@@ -481,8 +494,6 @@ class backend(basicBackend):
         
         # return results
         return {'rId':self.r_id,'rftf':self.rftfq[::4].tolist()}
-        
-        
     
-            
-    
+def _imageConvertMP(i):
+    return smp.toimage(numpy.abs(i))

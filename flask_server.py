@@ -1,16 +1,13 @@
 from flask import Flask, jsonify, request, redirect, send_from_directory, json, session, escape, render_template
 from werkzeug import secure_filename
-import os
-import uuid
-import shutil
+from speckle import gpu
+from datetime import timedelta
 from os.path import getctime
 
+import os
+import shutil
 import re
-
 import time
-from datetime import timedelta
-import speckle, numpy
-
 import glob
 import random
 
@@ -45,7 +42,6 @@ def manage_session():
         expired_at = time.time()-3600*config.LIFETIME
         
         # delete old files (currently they live for %life_hours% hours)
-        import glob
         files, ks, ds, kept, deleted = [], [], [], 0, 0
         for path in ('static/*/images/*session*.*','static/*/csv/*session*.*',config.UPLOAD_FOLDER+'/*session*.*'): files += glob.glob(path)
         fmt_str = r'(cdi|fth|xpcs)data_session([0-9]*)_id([0-9]*)(.*).(fits|zip|csv|png|jpg)'
@@ -89,10 +85,11 @@ def manage_session():
         backendi = imaging_backend.backend(session_id=s_id,gpu_info=gpu_info)
     
         # store these here in python; can't be serialized into the cookie!
-        sessions[s_id]             = {}
+        sessions[s_id] = {}
+        sessions[s_id]['fileMirror'] = {}
         sessions[s_id]['backendx'] = backendx
         sessions[s_id]['backendi'] = backendi
-        sessions[s_id]['last']     = time.time()
+        sessions[s_id]['last'] = time.time()
     
         # store these in the cookie?
         session.permanant = True
@@ -126,6 +123,8 @@ def allowed_file(name):
 
 def get_backend(project,purge=False):
     m = {'fth':'backendi','cdi':'backendi','xpcs':'backendx'}
+    if project == 'all':
+        return [sessions[session['s_id']][x] for x in list(set(m.values()))]
     try:
         backend = sessions[session['s_id']][m[project]]
         sessions[session['s_id']]['last'] = time.time()
@@ -217,31 +216,50 @@ def serve_error():
 @app.route('/filetree',methods=['POST',])
 def get_directory():
     manage_session()
-    from_backend = sessions[session['s_id']]['backendi'].listDirectory(request.json['dir'])
+    from_backend = sessions[session['s_id']]['backendi'].listDirectory(request.json)
+    sessions[session['s_id']]['fileMirror'].update(from_backend['forMirror'])
+    del from_backend['forMirror']
     return jsonify(**from_backend)
 
 @app.route('/remoteload',methods=['POST',])
 def remote_load():
     
+    def _manageFile():
+        fm = sessions[session['s_id']]['fileMirror']
+        
+        # if the requested file doesn't exist, make a copy
+        jname = request.json['fileName']
+
+        rname = fm[jname]['path']
+        lname = rname.replace(config.DATA_ROOT,config.DATA_MIRROR)
+        
+        # copy the file from remote to local
+        if not fm[jname]['local']:
+            print "not local; copying"
+            backend.mirrorFile(rname,lname)
+            fm[jname]['local'] = True
+
+        return lname
+
     # parse the json
-    project  = request.json['project']
-    fileName = request.json['fileName']
+    project = request.json['project']
     
     # get the backend
-    backend = get_backend(project)
+    backend  = get_backend(project)
+    
+    # figure out where the file is, and if we need to create a local copy
+    localFileName = _manageFile()
     
     # check the data. if it seems OK, load it
     # and redirect to the project page.
-    checked, error = backend.check_data(fileName)
+    checked, error = backend.check_data(localFileName)
     if checked:
-        backend.load_data(project,fileName)
+        backend.load_data(project,localFileName)
         print "redirecting to %s"%project
         return jsonify(**{'redirect':'/'+project})
     
     else:
         sessions[session['s_id']]['error_kwargs'] = {'error':error,'backend':project,'occasion':"checking the uploaded data",'img':random.choice(sadbabies)}
-        print "here!"
-        print session['s_id']
         return jsonify(**{'redirect':'/error'})
     
 @app.route('/<project>',methods=['GET',])
@@ -269,8 +287,6 @@ def dispatch_cmd(project,cmd):
     # dispatch commands to the backend
     backend = get_backend(project)
     
-    print project
-    
     if backend == None:
         error = "expired session"
         kwargs = {'error':"expired session",'occasion':'executing a command'}
@@ -281,7 +297,7 @@ def dispatch_cmd(project,cmd):
         return jsonify(**from_backend)
     
     except KeyError:
-        kwargs = {'error':"illegal command "+cmd,'occasion':'executing a command'}
+        kwargs = {'error':"illegal command "+cmd,'occasion':occ}
         return error_page(kwargs)
     
 @app.route('/<path:x>/sadbaby<int:y>.jpg')

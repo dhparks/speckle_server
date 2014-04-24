@@ -5,6 +5,7 @@ import itertools
 import os
 import Image
 import scipy
+import time
 
 # common libs
 from basic_backend import basicBackend
@@ -94,14 +95,12 @@ class backend(basicBackend):
         self.data_shape = io.get_fits_dimensions(self.data_path)
         self.frames     = self.data_shape[0]
         
-        print self.data_shape
-        
         if len(self.data_shape) !=  3 or (len(self.data_shape) == 3 and self.data_shape[0] == 1):
             raise TypeError("Data is 2 dimensional")
             
         # make the data square by padding with zeros
         _embed()
-
+        
         # make the intensity image(s)
         _save_scales()
         
@@ -134,6 +133,7 @@ class backend(basicBackend):
         
         # iterate through the regions. when one is encountered with
         # .changed == True, recalculate the intensity, g2, and fit to g2.
+        
         recalculate = [r for r in self.regions.keys() if  self.regions[r].changed]
         refit       = [r for r in self.regions.keys() if (self.regions[r].changed or self.refitg2)]
 
@@ -155,8 +155,6 @@ class backend(basicBackend):
 
             # record changes as made
             here.changed = False
-            
-        #print "refitting regions: %s"%refit
         
         for region_key in refit:
             
@@ -338,13 +336,10 @@ class backend(basicBackend):
         return response
 
 class region():
-    """ empty class for holding various attributes of a selected region.
-    Just basically easier than using a dictionary.
-    
-    1. data
-    2. g2 data
-    3. other stuff
-    
+    """ This class describes an area region of the data in terms
+    of detector (x,y) coordinates and also holds the results
+    of analysis on that region. This class includes the g2 and fit
+    methods.
     """
     
     def __init__(self):
@@ -415,7 +410,9 @@ class region():
         self.fit_params = fitted.final_params
     
     def update_coords(self,rmin,rmax,cmin,cmax):
-        print self.unique_id, rmin
         # update coordinates
-        if self.rmin != rmin or self.rmax != rmax or self.cmin != self.cmax: self.changed = True
+        self.changed = False
+        if self.rmin != rmin or self.rmax != rmax or cmin != self.cmin or cmax != self.cmax:
+            self.changed = True
         self.rmin, self.rmax, self.cmin, self.cmax = rmin, rmax, cmin, cmax
+        
