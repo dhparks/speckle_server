@@ -18,7 +18,7 @@ UL.fileTree A {
 	color: #333;
 	text-decoration: none;
 	display: block;
-	padding: 0px 2px;
+	padding: 0px 0px;
 }
 
 UL.fileTree A:hover {

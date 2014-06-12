@@ -38,23 +38,23 @@ var guiFunctions = {
     },
     
     validateForm: function (id) {
-	var who  = document.getElementById(id);
-	var what = who.value;
+	var who  = document.getElementById(id),
+	    what = who.value;
 	if (isNaN(what))  {who.className="fieldr"};
 	if (!isNaN(what)) {who.className="fieldg"};
 	if (what==='')    {who.className="field0"};
     },
     
     changeRasterBackground: function (args) {
-	var gcp = gui.components.propagation
+	var gcp = gui.components.propagation, x, imgPath;
 	if (gcp.hasData) {
 	    if (args.action !=  gcp.selected) {
 		$("#"+args.where+'-'+args.action).css("fill","grey")
 		try {$("#"+args.where+'-'+gcp.selected).css("fill","white")}
 		catch (err) {}
 		gcp.selected = args.action;}
-	    var x = 'static/imaging/images/bp_session'+gui.data.sessionId+'_id'+gui.data.propagationId+'.jpg'
-	    var imgPath = x.replace('bp',args.action.replace('show',''))
+	    x = 'static/imaging/images/bp_session'+gui.data.sessionId+'_id'+gui.data.propagationId+'.jpg'
+	    imgPath = x.replace('bp',args.action.replace('show',''))
 	    gcp.background.loadImage(imgPath)
 	}
     },
@@ -63,30 +63,29 @@ var guiFunctions = {
 	// validate form. if its ok, send the parameters to python.
 	// parse python's output and refresh the acutance graph.
 	
-	var _validateAndFormat = function() {
+	function _validateAndFormat() {
+
+	    // check value constraints. rearrange zvalues if necessary
+	    var e  = parseFloat($('#energy').val()),
+	        p  = parseFloat($('#pitch').val()),
+	        z1 = parseFloat($('#zmin').val()),
+	        z2 = parseFloat($('#zmax').val()),
+	        typesOK = !(isNaN(e) || isNaN(p) || isNaN(z1) || isNaN(z2)),
+	        gcp = gui.components.propagation,
+	        z3 = parseInt(z1),
+	        z4 = parseInt(z2),
+		ap, gchr, info, info2, attrname;
 	    
-	    // check value constraints
-	    var e  = parseFloat($('#energy').val());
-	    var p  = parseFloat($('#pitch').val());
-	    var z1 = parseFloat($('#zmin').val());
-	    var z2 = parseFloat($('#zmax').val());
-	    var typesOK = !(isNaN(e) || isNaN(p) || isNaN(z1) || isNaN(z2))
-	    
-	    // reorder z values if necessary. this is for the gui only;
-	    // will be used to set up the plot
-	    var gcp = gui.components.propagation
-	    var z3 = parseInt(z1);
-	    var z4 = parseInt(z2);
 	    if (z3 > z4) {gcp.zmin = z4; gcp.zmax = z3};
 	    if (z4 > z3) {gcp.zmin = z3; gcp.zmax = z4};
 	    if (z4 === z3) {typesOK = false};
 	    
 	    // format parameter dictionary
-	    var ap = 0;
+	    ap = 0;
 	    if ($('#apodize').is(":checked"))  {ap = 1;};
-	    var gchr  = gui.components.hologram.regions
-	    var info  = gchr[Object.keys(gchr)[0]].convertCoords();
-	    var info2 = {'energy':e,'zmin':z1,'zmax':z2,'pitch':p,'apodize':ap};
+	    gchr  = gui.components.hologram.regions
+	    info  = gchr[Object.keys(gchr)[0]].convertCoords();
+	    info2 = {'energy':e,'zmin':z1,'zmax':z2,'pitch':p,'apodize':ap};
 	    for (var attrname in info2) {info[attrname] = info2[attrname]};
 	    
 	    info['check'] = (e != '' && p != '' && (z1 != '' || z1 === 0) && (z2 != '' || z2 === 0) && gui.data.exists && typesOK);
@@ -94,11 +93,11 @@ var guiFunctions = {
 	    return info;
 	}
 	
-	var _backend = function (callback) {
+	function _backend(callback) {
 	    
-	    var _success = function (json) {
-		var gcp  = gui.components.propagation
-		var gcpb = gui.components.propagation.background 
+	    function _success(json) {
+		var gcp  = gui.components.propagation,
+		    gcpb = gui.components.propagation.background;
 		gui.data.propagationId = json.propagationId;
 		gcpb.frameSize         = json.frameSize;
 		callback(null)
@@ -112,11 +111,11 @@ var guiFunctions = {
 
 	}
 	
-	var _frontend = function (error) {
+	function _frontend(error) {
 	    
-	    var _loadData   = function (callback) {
+	    function _loadData(callback) {
 		
-		var _parseData = function (error,data) {
+		function _parseData(error,data) {
 		    
 		    if (error != null) {console.log(error);}
 		    
@@ -139,28 +138,30 @@ var guiFunctions = {
 		queue().defer(d3.csv, csvPath).await(_parseData);
 	    }
 	    
-	    var _redraw = function (error) {
+	    function _redraw(error) {
+		var action
+		
 		if (error != null) { console.log(error) }
 		gca.graph.draw({'yText':'Acutance','xText':'Distance'}); gca.graph.plot()
 
 		// load a new image into the rasterBackground
-		if (gcp.selected === null) {var action = 'showbp'}
-		else {var action = gcp.selected}
+		if (gcp.selected === null) {action = 'showbp'}
+		else {action = gcp.selected}
 		guiFunctions.actionDispatch({'where':'propagation','action':action})
 	    }
 	    
 	    // load the data and the raster image, then redraw the
 	    // acutance graph
-	    var gca     = gui.components.acutance
-	    var gcp     = gui.components.propagation
-	    var csvPath = '/static/imaging/csv/acutance_session'+gui.data.sessionId+'_id'+gui.data.propagationId+'.csv'
-	    var imgPath = 'static/imaging/images/bp_session'+gui.data.sessionId+'_id'+gui.data.propagationId+'.jpg'
+	    var gca = gui.components.acutance,
+	        gcp = gui.components.propagation,
+	        csvPath = '/static/imaging/csv/acutance_session'+gui.data.sessionId+'_id'+gui.data.propagationId+'.csv',
+	        imgPath = 'static/imaging/images/bp_session'+gui.data.sessionId+'_id'+gui.data.propagationId+'.jpg';
 	    queue().defer(_loadData).awaitAll(_redraw)
 	    gui.unlock()
 	}
 
-	var info = _validateAndFormat();
-	if (info.check) {queue().defer(_backend).await(_frontend)}
+	if (_validateAndFormat().check) {queue().defer(_backend).await(_frontend)}
+	else {alert("This is an error in the propagation parameters")}
     },
 }
 

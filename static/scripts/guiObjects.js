@@ -572,6 +572,11 @@ function draggableRegionColor(where,sizes) {
     this.toggleFill = function () {this.protoToggleFill(this.where)}
 }
 
+// define the draggable "region" which extends the entire
+// vertical range of the plot. this is currently used in xpcs
+// to allow a region of the xpcs plot to be re-emphasized in
+// the fitting.
+
 // object for rastering backgrounds such as that seen in back propagation
 // no current need for subclassing
 function rasterBackground(where,sizeX,sizeY) {
@@ -630,9 +635,7 @@ function rasterBackground(where,sizeX,sizeY) {
     this.raster = function (n) {
 	// n is the frame number found in some other action, probably
 	// a scrubber or sliderGraph
-	
-	console.log("raster "+n)
-	
+
 	var ix  = n%this.gridSize, iy = Math.floor(n/this.gridSize)
 	var str = 'scale('+this.scale+') translate(-'+this.frameSize*ix+',-'+this.frameSize*iy+')'
 	$("#"+this.name+'-img').attr('transform',str);
@@ -718,7 +721,6 @@ function graph() {
 	if ('nticksX' in extras) {
 	    var xAxis = d3.svg.axis().scale(w.xScale).orient("bottom").ticks(extras.nticksX);}
 	else {
-	    console.log("here")
 	    var xAxis = d3.svg.axis().scale(w.xScale).orient("bottom").ticks(5);}
 	
 	// nticksY

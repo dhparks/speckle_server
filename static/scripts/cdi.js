@@ -1,5 +1,6 @@
-backendTasks = {}
-gui = {}
+
+var backendTasks = {}
+var gui = {}
 
 gui.data = {}
 
@@ -71,15 +72,15 @@ var guiFunctions = {
     },
     
     changeRasterBackground: function (args) {
-	var gcp = gui.components.propagation
+	var gcp = gui.components.propagation, x, imgPath;
 	if (gcp.hasData) {
 	    if (args.action !=  gcp.selected) {
 		$("#"+args.where+'-'+args.action).css("fill","grey")
 		try {$("#"+args.where+'-'+gcp.selected).css("fill","white")}
 		catch (err) {}
 		gcp.selected = args.action;}
-	    var x = 'static/imaging/images/bp_session'+gui.data.sessionId+'_id'+gui.data.propagationId+'.jpg'
-	    var imgPath = x.replace('bp',args.action.replace('show',''))
+	    x = 'static/imaging/images/bp_session'+gui.data.sessionId+'_id'+gui.data.propagationId+'.jpg'
+	    imgPath = x.replace('bp',args.action.replace('show',''))
 	    gcp.background.loadImage(imgPath)
 	}
     },
@@ -93,58 +94,62 @@ var guiFunctions = {
     
     download: function () {
     
-	var _onSuccess    = function () {
-	    var name      = "reconstruction_id"+gui.data.dataId+"_round"+sr+"_zipped.zip"
-	    var save      = document.createElement('a');
-	    save.href     = "static/imaging/fits/"+name;
-	    save.target   = '_blank';
+	function _onSuccess() {
+	    var name, save, event;
+	    name = "reconstruction_id"+gui.data.dataId+"_round"+sr+"_zipped.zip"
+	    save = document.createElement('a');
+	    save.href = "static/imaging/fits/"+name;
+	    save.target = '_blank';
 	    save.download = name;
 
-	    var event = document.createEvent('Event');
+	    event = document.createEvent('Event');
 	    event.initEvent('click', true, true);
 	    save.dispatchEvent(event);
 	    (window.URL || window.webkitURL).revokeObjectURL(save.href)
 	}
-	
-	var sr = gui.components.reconstruction.selectedRound
-	$.getJSON('cdi/download', {'reconstructionId':sr}, function (results) {_onSuccess()} );
+
+	$.getJSON('cdi/download',
+		  {'reconstructionId': gui.components.reconstruction.selectedRound},
+		  function (results) {_onSuccess()} );
     },
     
     propagate: function () {
 	
-	var _validateAndFormat = function() {
+	function _validateAndFormat() {
+	    
+	    var e, p, z1, z2, typesOK, z3, z4, ap, regs, info, info2, key;
 	    
 	    // check value constraints
-	    var e  = parseFloat($('#energy').val());
-	    var p  = parseFloat($('#pitch').val());
-	    var z1 = parseFloat($('#zmin').val());
-	    var z2 = parseFloat($('#zmax').val());
-	    var typesOK = !(isNaN(e) || isNaN(p) || isNaN(z1) || isNaN(z2))
+	    e  = parseFloat($('#energy').val());
+	    p  = parseFloat($('#pitch').val());
+	    z1 = parseFloat($('#zmin').val());
+	    z2 = parseFloat($('#zmax').val());
+	    typesOK = !(isNaN(e) || isNaN(p) || isNaN(z1) || isNaN(z2))
 	    
 	    // reorder z values if necessary. this is for the gui only;
 	    // will be used to set up the plot
-	    var z3 = parseInt(z1);
-	    var z4 = parseInt(z2);
+	    z3 = parseInt(z1);
+	    z4 = parseInt(z2);
 	    if (z3 > z4) {gcp.zmin = z4; gcp.zmax = z3};
 	    if (z4 > z3) {gcp.zmin = z3; gcp.zmax = z4};
 	    if (z4 === z3) {typesOK = false};
 	    
 	    // format parameter dictionary
-	    var ap = 0;
+	    ap = 0;
 	    if ($('#apodize').is(":checked"))  {ap = 1;};
-	    var regs  = gui.components.reconstruction.regions
-	    var info  = regs[Object.keys(regs)[0]].convertCoords();
-	    var info2 = {'energy':e,'zmin':z1,'zmax':z2,'pitch':p,'apodize':ap,'round':gcr.selectedRound};
-	    for (var key in info2) {info[key] = info2[key]};
+	    regs  = gui.components.reconstruction.regions
+	    info  = regs[Object.keys(regs)[0]].convertCoords();
+	    info2 = {'energy':e,'zmin':z1,'zmax':z2,'pitch':p,'apodize':ap,'round':gcr.selectedRound};
+	    for (key in info2) {info[key] = info2[key]};
 	    
 	    info['check'] = (e != '' && p != '' && (z1 != '' || z1 === 0) && (z2 != '' || z2 === 0) && gui.data.exists && typesOK);
 	    	
 	    return info;
 	};
 	
-	var _backend = function (callback) {
+	function _backend(callback) {
 	    
-	    var _onSuccess = function (json) {
+	    function _onSuccess(json) {
 		gui.data.propagationId   = json.propagationId;
 		gcp.background.frameSize = json.frameSize;
 		callback(null);
@@ -155,11 +160,11 @@ var guiFunctions = {
 	    $.getJSON("cdi/propagate", info, _onSuccess);
 	};
 	
-	var _frontend = function (error) {
+	function _frontend(error) {
 	    
-	    var _loadData   = function (callback) {
+	    function _loadData(callback) {
 		
-		var _parseData = function (error,data) {
+		function _parseData(error,data) {
 		    if (error != null) {console.log(error);}
 		    // parse the data and attach to acutance object
 		    gca.data    = data.map(function (d) {return {x:parseFloat(d.z),y:parseFloat(d.acutance)}})
@@ -174,13 +179,15 @@ var guiFunctions = {
 		queue().defer(d3.csv, csvPath).await(_parseData);
 	    }
 
-	    var _redraw = function (error) {
+	    function _redraw(error) {
+		var action;
+		
 		if (error != null) { console.log(error) }
 		gca.graph.draw({'yText':'Acutance','xText':'Distance'}); gca.graph.plot()
 
 		// load a new image into the rasterBackground
-		if (gcp.selected === null) {var action = 'showbp'}
-		else {var action = gcp.selected}
+		if (gcp.selected === null) {action = 'showbp'}
+		else {action = gcp.selected}
 		guiFunctions.actionDispatch({'where':'propagation','action':action})
 	    }
 	    
@@ -188,24 +195,25 @@ var guiFunctions = {
 	    queue().defer(_loadData).await(_redraw)
 	    gui.unlock()
 	}
+		
+	var gca = gui.components.acutance,
+	    gcp = gui.components.propagation,
+	    gcr = gui.components.reconstruction;
 	
-	var gca = gui.components.acutance;
-	var gcp = gui.components.propagation;
-	var gcr = gui.components.reconstruction;
-	var info = _validateAndFormat();
-	
-	if (info.check) {queue().defer(_backend).await(_frontend)}
+	if (_validateAndFormat().check) {queue().defer(_backend).await(_frontend)}
     },
     
     reconstruct: function (args) {
     
-	var _validateAndFormat = function () {
+	function _validateAndFormat() {
 	    
-	    var i = parseInt($('#iterations').val());
-	    var r = parseInt($('#rounds').val());
-	    var n = parseInt($('#numtrials').val());
-	    var s = parseFloat($('#swblur').val());
-	    var t = parseFloat($('#swthreshold').val());
+	    var i, r, n, s, t;
+	    
+	    i = parseInt($('#iterations').val());
+	    r = parseInt($('#rounds').val());
+	    n = parseInt($('#numtrials').val());
+	    s = parseFloat($('#swblur').val());
+	    t = parseFloat($('#swthreshold').val());
 
 	    // enforce defaults not displayed in html boxes
 	    params = {}
@@ -221,7 +229,7 @@ var guiFunctions = {
 	    
 	}
     
-	var _sendSupport = function (callback) {
+	function _sendSupport(callback) {
 
 	    // reset the master round counter
 	    gcr.round = 0;
@@ -242,25 +250,27 @@ var guiFunctions = {
 	    });
 	}
 	
-	var _runRounds = function (error) {
+	function _runRounds(error) {
 
 	    var currentRound = 0;
 
-	    var frontend = function (data) {
+	    function _frontend(data) {
 		
-		var _parseData = function (callback) {
-		    var l = data.rftf.length, l2 = 1./l, rftf = []
-		    for (var k=0;k<l;k++) {rftf.push({x:k*l2,y:data.rftf[k]})}
+		function _parseData(callback) {
+		    var l = data.rftf.length, l2 = 1./l, rftf = [], k;
+		    for (k=0; k<l; k++) {rftf.push({x:k*l2,y:data.rftf[k]})}
 		    gcr2.rftfs[gcr.rId] = rftf;
 		    callback(null);
 		}
 		
-		var _update = function (error) {
-		    // make a new breadcrumb
-		    var names    = Object.keys(gcr.crumbs).sort()
-		    var lastName = names[names.length-1]
+		function _update(error) {
+		    var names, lastName, bc;
 		    
-		    var bc = new breadcrumb('reconstruction',data.rId);
+		    // make a new breadcrumb
+		    names    = Object.keys(gcr.crumbs).sort()
+		    lastName = names[names.length-1]
+		    
+		    bc = new breadcrumb('reconstruction',data.rId);
 		    gcr.crumbs[bc.rId] = bc
 		    bc.draw()
 
@@ -276,11 +286,17 @@ var guiFunctions = {
 		    else {gui.unlock()}
 		}
 		
-		var _loadImages = function (callback) {
+		function _loadImages(callback) {
+		    
+		    var img1 = new Image(),
+		        img2 = new Image(),
+			loaded = 0,
+			loaded1 = false,
+			loaded2 = false,
+			path;
+		    
 		    // cache the images.
-		    var path = 'static/imaging/images/r_session'+gui.data.sessionId+'_id'+gcr.rId+'_linr.png'
-		    var img1 = new Image(), img2 = new Image(), loaded = 0;
-		    var loaded1 = false; loaded2 = false;
+		    path = 'static/imaging/images/r_session'+gui.data.sessionId+'_id'+gcr.rId+'_linr.png'
 		    img1.onload = function () {loaded += 1; if (loaded == 2) {callback(null)}};
 		    img2.onload = function () {loaded += 1; if (loaded == 2) {callback(null)}};
 		    img1.src = path;
@@ -297,7 +313,7 @@ var guiFunctions = {
 
 	    };
 	    
-	    var backend = function () {
+	    function _backend() {
 		var url = "cdi/reconstruct"
 		$.getJSON(url, params, frontend)
 	    };
@@ -313,9 +329,11 @@ var guiFunctions = {
 	// which resets the reconsturction. the second runs the reconstruction
 	// directly, which simply continues the reconstruction
 
-	var gc   = gui.components
-	var gcr  = gc.reconstruction, gcr2 = gc.rftf, gch = gc.hologram
-	var params = _validateAndFormat()
+	var gc   = gui.components,
+	    gcr  = gc.reconstruction,
+	    gcr2 = gc.rftf,
+	    gch  = gc.hologram,
+	    params = _validateAndFormat();
 	
 	if (gch.hasSupport) {
 	    if (args.where == 'hologram') {
@@ -334,13 +352,12 @@ var guiFunctions = {
 	// required!!! : where, domainMin, domainMax, rangeMin, rangeMax,
 	// optional: interpolation, xscale, yscale, [use_rscale, nf, rmax, rmin]
 	
-	var w = gui.components[args.where]
+	var w, vals, xtype, ytype, key;
 	
-	console.log('in set plot properties')
-	console.log(args)
-	
+	w = gui.components[args.where]
+
 	// define the default values
-	var vals = {'domainMin':null, 'domainMax': null, 'rangeMin':null, 'rangeMax':null,
+	vals = {'domainMin':null, 'domainMax': null, 'rangeMin':null, 'rangeMax':null,
 		'interpolation':'linear','xscale':'linear','yscale':'linear','use_rscale':false,
 		'ni':null,'nf':null, 'rmax':7, 'rmin': 0}
 		
@@ -349,13 +366,13 @@ var guiFunctions = {
 	for (key in args) {w[key] = args[key]}
 
 	// define the scales and lineFunction
-	var xtype  = d3.scale.linear()
-	var ytype  = d3.scale.linear()
+	xtype = d3.scale.linear()
+	ytype = d3.scale.linear()
 	if (w.xscale == 'log') {xtype = d3.scale.log()}
 	if (w.yscale == 'log') {ytype = d3.scale.log()}
-	w.xScale   = xtype.range([0, w.width]).domain([w.domainMin,w.domainMax]);
-	w.yScale   = ytype.range([w.height,0]).domain([w.rangeMin, w.rangeMax]).clamp(true);
-	w.lineFunc = d3.svg.line().interpolate(w.interpolation).x(function(d) { return w.xScale(d.x); }).y(function(d) { return w.yScale(d.y); });
+	w.xScale = xtype.range([0, w.width]).domain([w.domainMin,w.domainMax]);
+	w.yScale = ytype.range([w.height,0]).domain([w.rangeMin, w.rangeMax]).clamp(true);
+	w.lineFunc = d3.svg.line().interpolate(w.interpolation).x(function(d) {return w.xScale(d.x);}).y(function(d) {return w.yScale(d.y);});
 	
 	// some plots need an rscale for plotting the dots
 	if (w.use_rscale) {gcr.rscale = d3.scale.log().domain([w.n0,w.nf]).range([w.rmax,w.rmin]).clamp(false);}
@@ -365,32 +382,33 @@ var guiFunctions = {
 	
 	// this function runs when a breadcrumb is clicked
 	
-	var _deselectOld = function () {
+	function _deselectOld() {
 	    if (gcr.selectedRound != null) {oldCrumb.shrink("white")}};
 	
-	var _selectNew   = function () {
+	function _selectNew() {
 	    if (gcr.rScale === "linr") {var newColor = "white";}
-	    else {var newColor = sqrtColor;}
+	    else {newColor = sqrtColor;}
 	    newCrumb.enlarge(newColor);
 	};
 	
-	var _replotRFTF  = function () {
+	function _replotRFTF() {
 	    gcr2.data = gcr2.rftfs[args.id];
 	    gcr2.graph.plot()
 	};
 	
-	var _reselect    = function () {
+	function _reselect() {
 	    if (gcr.rScale === "linr") {newColor = sqrtColor; gcr.rScale = "sqrt"}
-	    else {newColor = "white";   gcr.rScale = "linr"}
+	    else {newColor = "white"; gcr.rScale = "linr"}
 	    oldCrumb.enlarge(newColor);
 	};
+	
+	var newColor, gcr, gcr2, newScale, newColor, sqrtColor = 'cyan', newCrumb, path;
 
-	var gcr  = gui.components.reconstruction;
-	var gcr2 = gui.components.rftf
-	var newScale, newColor, sqrtColor = "cyan"
+	gcr  = gui.components.reconstruction;
+	gcr2 = gui.components.rftf
 	
 	// new and old crumbs
-	var newCrumb = gcr.crumbs[args.id]
+	newCrumb = gcr.crumbs[args.id]
 	if (gcr.selectedRound != null) {oldCrumb = gcr.crumbs[gcr.selectedRound];}
 
 	// if clicked is not the selected crumb, select the current crumb
@@ -399,7 +417,7 @@ var guiFunctions = {
 	else { _reselect() }
 
 	// set the new background
-	var path = 'static/imaging/images/r_session'+gui.data.sessionId+'_id'+args.id+'_'+gcr.rScale+'.png'
+	path = 'static/imaging/images/r_session'+gui.data.sessionId+'_id'+args.id+'_'+gcr.rScale+'.png'
 	gcr.background.zoom = 0;
 	gcr.background.loadImage(path)
 	gcr.selectedRound = args.id;
@@ -407,8 +425,8 @@ var guiFunctions = {
     
     validateField: function (id) {
 	// this could be made more sophisticated...
-	var who  = document.getElementById(id);
-	var what = who.value;
+	var who  = document.getElementById(id),
+	    what = who.value;
 	if (isNaN(what))  {who.className="fieldr"};
 	if (!isNaN(what)) {who.className="fieldg"};
 	if (what==='')    {who.className="field0"};
@@ -429,8 +447,11 @@ var starts = {
     
     controls: function (forWhat) {
 	
-	var o = "onkeyup", f = "guiFunctions.validateField(this.id)"
-	var specs = {
+	var o = "onkeyup",
+	    f = "guiFunctions.validateField(this.id)",
+	    x, y, e,
+	    
+	specs = {
 		'reconstruction':[
 		    {'type':'text','id':'rounds','placeholder':'Rounds','size':5,"onkeyup":f},
 		    {'type':'text','id':'numtrials','placeholder':'Trials','size':5,"onkeyup":f},
@@ -445,10 +466,10 @@ var starts = {
 		'blocker':[
 		    {'type':'text','id':'blockerpower','placeholder':'Power','size':10,}, 
 		]
-	}
+	};
 
 	// add a div
-	var x = d3.select('#controls').append("div")
+	x = d3.select('#controls').append("div")
 		.attr("id",forWhat+"Controls")
 		.attr("class","controls")
 		.text("\u00a0"+forWhat+" controls")
@@ -456,44 +477,50 @@ var starts = {
 	// for each element in the array, add an html element with the specified
 	// attributes
 	specs[forWhat].forEach(function (d) {
-	    var y = x.append("input");
+	    y = x.append("input");
 	    for (e in d) {y.attr(e,d[e])}})
 
     },
     
     hologram: function () {
+	
+	var h, path, dbg, k, b;
+	
 	// instantiate the draggable background
-	var h    = "hologram"
-	var path = 'static/imaging/images/ifth_session'+gui.data.sessionId+'_id'+gui.data.dataId+'_'+'0.8_logd.jpg'
-	var dbg  = new draggableBackground(h,gui.sizes.window,gui.sizes.window);
+	h    = "hologram"
+	path = 'static/imaging/images/ifth_session'+gui.data.sessionId+'_id'+gui.data.dataId+'_'+'0.8_logd.jpg'
+	dbg  = new draggableBackground(h,gui.sizes.window,gui.sizes.window);
 	dbg.draw()
 	dbg.loadImage(path)
 	gui.components[h].background = dbg;
 	
 	// create the clickable svg buttons. arguments: action, coords {x, y}
 	// these do not need to be stored in the gui object
-	var b = [];
+	b = [];
 	b.push(new actionButton(h, 'zoomIn',     {x:5, y:5}, 'plus'))
 	b.push(new actionButton(h, 'zoomOut',    {x:30, y:5}, 'minus'))
 	b.push(new actionButton(h, 'lockBg',     {x:55, y:5}, 'lock'))
 	b.push(new actionButton(h, 'reconstruct',{x:275,y:5}, 'rArrow'))
 	b.push(new actionButton(h, 'addRegion',  {x:5,y:275}, 'square'))
 	b.push(new actionButton(h, 'delRegions', {x:30,y:275}, 'x'))
-	for (var k = 0; k < b.length; k++) {b[k].draw()}
+	for (k = 0; k < b.length; k++) {b[k].draw()}
 	
 	gui.components[h].hasSupport = false;
 	
     },
 
     propagation: function () {
-	var gcp = gui.components.propagation
+	
+	var gcp, buttons, k;
+	
+	gcp = gui.components.propagation
 	gcp.background = new rasterBackground('propagation',gui.sizes.window,gui.sizes.window);
 	gcp.background.draw()
 	
-	var buttons = [];
+	buttons = [];
 	buttons.push(new actionButton('propagation', 'showbp', {x:5, y:5},  'tophat'))
 	buttons.push(new actionButton('propagation', 'showgrad', {x:30, y:5}, 'derivative'))
-	for (var k = 0; k < buttons.length; k++) {buttons[k].draw()}
+	for (k = 0; k < buttons.length; k++) {buttons[k].draw()}
 	
 	gcp.selected = null;
 	gcp.hasData  = false;
@@ -510,37 +537,39 @@ var starts = {
 	// 3. the rftf data series
 	// 4. the acutance plot
 	
+	var gcr, r, dbg, reg, buttons;
+	
 	Object.keys(gui.components.reconstruction.crumbs).forEach(function (key) {gui.components.reconstruction.crumbs[key].remove()})
 	d3.select("#reconstruction-svg").remove()
 	d3.select("#acutance-svg").remove()
 	d3.select("#propagation-svg").remove()
 	
 	// reset the reconstruction objects
-	var gcr = gui.components.reconstruction
-	var r   = "reconstruction"
-	gcr.regions  = {};
+	gcr = gui.components.reconstruction
+	r = "reconstruction"
+	gcr.regions = {};
 	gcr.regionId = null;
-	gcr.rScale   = "linr";
+	gcr.rScale = "linr";
 	gcr.selectedRound = null;
 	
 	// draw the draggable background
-	var dbg  = new draggableBackground(r,gui.sizes.window,gui.sizes.window);
+	dbg = new draggableBackground(r,gui.sizes.window,gui.sizes.window);
 	dbg.draw()
 	dbg.lock()
 	gcr.background = dbg;
 	
 	// add the draggable region
-	var reg = new draggableRegionWhite('reconstruction',gui.sizes,false)
+	reg = new draggableRegionWhite('reconstruction',gui.sizes,false)
 	gcr.regions[reg.regionId] = reg;
 	reg.draw()
 
 	// create the clickable svg buttons. arguments: action, coords {x, y}
 	// these do not need to be stored in the gui object
-	var buttons = [];
+	buttons = [];
 	buttons.push(new actionButton(r, 'propagate',   {x:275,y:5}, 'rArrow'))
 	buttons.push(new actionButton(r, 'reconstruct', {x:5,y:275}, 'plus'))
 	buttons.push(new actionButton(r, 'download',    {x:30,y:275}, 'dArrow'))
-	for (var k = 0; k < buttons.length; k++) {buttons[k].draw()}
+	for (k = 0; k < buttons.length; k++) {buttons[k].draw()}
 	    
     },
 

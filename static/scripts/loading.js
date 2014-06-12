@@ -30,9 +30,8 @@ $('#experiments div').each(function () {
 
 });
 
-// file tree
+// file tree selection/deselection
 selectedId = null;
-fileName = null;
 
 var urls = ['directory.png','file.png','file_selected.png','folder_open.png','spinner.gif']
 for (var k = 0; k < urls.length; k++) {
@@ -44,10 +43,9 @@ for (var k = 0; k < urls.length; k++) {
 $(document).ready(
     function() {$('#fileTree').fileTree({},
 	function(id) {
-	    
+
 	    if (selectedId === id) {
 		selectedId = null;
-		fileName   = null;
 		$('#'+id).removeClass("selectedFile")
 		$('#'+id).children().removeClass("selectedFile")
 	    }
@@ -60,7 +58,6 @@ $(document).ready(
 		    }
 		
 		selectedId = id;
-		fileName = $('#'+id).children().attr('rel');
 		$('#'+id).children().addClass("selectedFile")
 		$('#'+id).addClass("selectedFile")
 	    }
@@ -74,14 +71,14 @@ $('#remotesubmitter').click(function () {
     // verify a project exists. if it does, get the
     // filename and send it to the server
     if (selectedProject === null) {alert(noExperiment)}
-    if (fileName === null) {alert(noData)}
+    if (selectedId === null) {alert(noData)}
     
-    if (selectedProject != null && fileName != null) {
+    if (selectedProject != null && selectedId != null) {
 
 	$.ajax({
 	    url: "/remoteload",
 	    type: 'POST',
-	    data: JSON.stringify({'project':selectedProject,'fileName':fileName}),
+	    data: JSON.stringify({'project':selectedProject,'fileName':selectedId}),
 	    contentType: 'application/json; charset=utf-8',
 	    dataType: 'json',
 	    async: true,
@@ -101,8 +98,6 @@ var validateUpload = function () {
 	alert(noExperiment);
 	return false;
     }
-    
-    console.log($('#fileinput').attr("name"))
     
     if ($('#fileinput').attr("name") == "") {
 	alert(noData);

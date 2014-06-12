@@ -191,12 +191,12 @@ class basicBackend(object):
                 r = ['<ul class="fileTree" style="display: none;">']
                 r.append('Could not load directory: %s' % str(e))
                 r.append('</ul>')
-                return {'html':''.join(r)}
+                return {'html':''.join(r), 'forMirror':forMirror}
                 
         r = ['<ul class="fileTree" style="display: none;">']
         r += [_build(**f) for f in folders+files]
         r.append('</ul>')
-        
+
         return {'html':''.join(r),'forMirror':forMirror}
     
     def mirrorFile(self,remoteName,localName):

@@ -78,7 +78,7 @@ def manage_session():
         t    = int(s_id)
         
         # spin up a new gpu context and new analysis backends
-        if use_gpu: gpu_info = speckle.gpu.init()
+        if use_gpu: gpu_info = gpu.init()
         else: gpu_info = None
         
         backendx = xpcs_backend.backend(session_id=s_id,gpu_info=gpu_info)

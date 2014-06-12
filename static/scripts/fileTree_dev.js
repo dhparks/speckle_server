@@ -22,13 +22,10 @@ if(jQuery) (function($){
 					$(c).addClass('wait');
 					$(".fileTree.start").remove();
 
-					console.log(t);
-							
-							
 					$.ajax({
 						url: "/filetree",
 						type: 'POST',
-						data: JSON.stringify({'dir':t}),
+						data: JSON.stringify({'dir':t,'recent':$("#recent").is(":checked")}),
 						contentType: 'application/json; charset=utf-8',
 						dataType: 'json',
 						async: true,

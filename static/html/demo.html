@@ -5,6 +5,8 @@
 <title>Speckle Analysis Server</title>
 <style>
 
+    html {overflow-y:scroll}
+
     #container {
         left:50%;
 	margin:0 0 0 -232px;
@@ -96,7 +98,17 @@
     form {
 	margin-bottom:0;
     }
-
+    
+    .leftalign {
+	display:inline;
+	float:left;
+    }
+    
+    .rightalign {
+	display:inline;
+	float: right;
+    }
+    
 
 </style>
 <script src="static/scripts/jquery-2.0.3.min.js"></script>
@@ -132,12 +144,17 @@
 	</div>
 	
 	<div class="uploading fullwidth" id="uploader">
-	    Use file on server
+	    <div class="leftalign">Use file on server</div>
+	    <br>
+	    <!--<div class="rightalign">
+		<form>
+		<input type="checkbox" id="recent" value="recent"> Show recent data only
+		</form>
+	    </div>-->
 	    <hr>
 	    <div id="fileTree" class="demo"></div>
 	    <hr>
 	    <button id="remotesubmitter" type="button">Analyze</button>
-	    </form>
 	</div>
 	
     </div>
