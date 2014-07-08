@@ -1,13 +1,16 @@
-from flask import Flask, jsonify, request, redirect, send_from_directory, json, session, escape, render_template
-from werkzeug import secure_filename
-from speckle import gpu
-from datetime import timedelta
-from os.path import getctime
+from flask import Flask, jsonify, request, redirect, send_from_directory, \
+json, session, escape, render_template
 
 import os
-import shutil
+import uuid
+from os.path import getctime
+
 import re
+
 import time
+from datetime import timedelta
+import speckle
+
 import glob
 import random
 
@@ -19,9 +22,9 @@ try:
     import pyopencl
     import pyopencl.array as cla
     import pyfft
-    use_gpu = True
+    USE_GPU = True
 except ImportError:
-    use_gpu = False
+    USE_GPU = False
     
 # code for backends; gets re-instantiated for each session
 import server_config as config
@@ -36,53 +39,83 @@ def manage_session():
     # if not, assign one. the way to check for a session is to try to get a
     # key; an error indicates no session
     
-    def _delete_old_files(ct):
+    def _delete_old_files():
+        """ Find and delete files from old sessions """
 
         # define the expiration time constant
         expired_at = time.time()-3600*config.LIFETIME
         
         # delete old files (currently they live for %life_hours% hours)
-        files, ks, ds, kept, deleted = [], [], [], 0, 0
-        for path in ('static/*/images/*session*.*','static/*/csv/*session*.*',config.UPLOAD_FOLDER+'/*session*.*'): files += glob.glob(path)
-        fmt_str = r'(cdi|fth|xpcs)data_session([0-9]*)_id([0-9]*)(.*).(fits|zip|csv|png|jpg)'
+        files, kept_sessions, del_sessions, kept, deleted = [], [], [], 0, 0
+        path1 = 'static/*/images/*session*.*'
+        path2 = 'static/*/csv/*session*.*'
+        path3 = config.UPLOAD_FOLDER+'/*session*.*'
+        for path in (path1, path2, path3):
+            files += glob.glob(path)
+        fmt_str = r'(cdi|fth|xpcs)data_session([0-9]*)_id([0-9]*)(.*)\
+                  .(fits|zip|csv|png|jpg)'
 
-        for f in files:
+        for file_name in files:
             
             # get the session id for the file
             try:
-                project, session_id, data_id, extra, fmt = re.match(fmt_str,f).groups()
+                matched = re.match(fmt_str, file_name).groups()
+                project, session_id, data_id, extra, fmt = matched
             except AttributeError:
-                project, session_id, data_id, extra, fmt = None, None, None, None, None
+                project = None
+                session_id = None
+                data_id = None
+                extra = None
+                fmt = None
             
             # see how old the file is. if too old, delete it.
-            if getctime(f) < expired_at and extra != '_crashed':
-                os.remove(f); deleted += 1; ds.append(session_id)
+            try:
+                time0 = getctime(file_name)
+            except OSError:
+                # this error showed up in the log; not sure of cause, as
+                # glob already found the file
+                # and flask is blocking. error message:
+                # "anaconda/lib/python2.7/genericpath.py", line 64, in getctime
+                # return os.stat(filename).st_ctime
+                # OSError: [Errno 2] No such file or directory:
+                time0 = expired_at+1
+
+            if time0 < expired_at and extra != '_crashed':
+                os.remove(file_name)
+                deleted += 1
+                del_sessions.append(session_id)
             else:
-                kept += 1; ks.append(session_id)
+                kept += 1
+                kept_sessions.append(session_id)
                 
-        print "kept %s files from %s distinct sessions"%(kept,len(set(ks)))
-        print "deleted %s files from %s distinct sessions"%(deleted,len(set(ds)))
+        msg1 = "kept %s files from %s distinct sessions"
+        msg2 = "deleted %s files from %s distinct sessions"
+        print msg1%(kept, len(set(kept_sessions)))
+        print msg2%(deleted, len(set(del_sessions)))
         
     def _delete_old_sessions():
-        # delete old sessions from the sessions dictionary. this removes the gpu
-        # contexts, backends, etc.
-        tx = time.time()
-        for sk in sessions.keys():
-            if tx-sessions[sk]['last'] > 3600*config.LIFETIME:
-                del sessions[sk]
+        """ Delete old sessions from the sessions dict. Removes gpu
+        info, backends, etc """
+        time_now = time.time()
+        for s_key in sessions.keys():
+            if time_now-sessions[s_key]['last'] > 3600*config.LIFETIME:
+                del sessions[s_key]
                 
     def _make_new_session():
+        """ Make a new session; instantiate new backends """
         
         # make a new uuid for the session
-        s_id = str(time.time()).replace('.','')[:12]
-        t    = int(s_id)
+        s_id = str(time.time()).replace('.', '')[:12]
+        int_time = int(s_id)
         
         # spin up a new gpu context and new analysis backends
-        if use_gpu: gpu_info = gpu.init()
-        else: gpu_info = None
+        if USE_GPU:
+            gpu_info = speckle.gpu.init()
+        else:
+            gpu_info = None
         
-        backendx = xpcs_backend.backend(session_id=s_id,gpu_info=gpu_info)
-        backendi = imaging_backend.backend(session_id=s_id,gpu_info=gpu_info)
+        backendx = xpcs_backend.Backend(session_id=s_id, gpu_info=gpu_info)
+        backendi = imaging_backend.Backend(session_id=s_id, gpu_info=gpu_info)
     
         # store these here in python; can't be serialized into the cookie!
         sessions[s_id] = {}
@@ -93,25 +126,25 @@ def manage_session():
     
         # store these in the cookie?
         session.permanant = True
-        session['s_id']   = s_id
+        session['s_id'] = s_id
         print "session %s"%s_id
         
-        return t
+        return int_time
         
     try:
         s_id = session['s_id']
     except KeyError:
-        ct = _make_new_session()
-        _delete_old_files(ct)
+        new_session = _make_new_session()
+        _delete_old_files()
         _delete_old_sessions()
 
-# functions to handle file uploading, mostly just taken from flask online documents
 def allowed_file(name):
+    """ Check if file is allowed by examining extension """
     
     ext, error, allowed = None, None, False
     
     if '.' in name:
-        ext = name.rsplit('.',1)[1]
+        ext = name.rsplit('.', 1)[1]
         if ext in config.ALLOWED_EXTS:
             allowed = True
         else:
@@ -121,24 +154,26 @@ def allowed_file(name):
     
     return allowed, ext, error
 
-def get_backend(project,purge=False):
-    m = {'fth':'backendi','cdi':'backendi','xpcs':'backendx'}
-    if project == 'all':
-        return [sessions[session['s_id']][x] for x in list(set(m.values()))]
+def get_backend(project, purge=False):
+    """ Get the backend for a project """
+    backends = {'fth':'backendi', 'cdi':'backendi', 'xpcs':'backendx'}
     try:
-        backend = sessions[session['s_id']][m[project]]
+        backend = sessions[session['s_id']][backends[project]]
         sessions[session['s_id']]['last'] = time.time()
-        if project == 'xpcs' and purge: backend.regions = {}
+        if project == 'xpcs' and purge:
+            backend.regions = {}
         return backend
     except KeyError:
         return None
 
 def error_page(kwargs):
-    kwargs['img'] = random.choice(sadbabies)
-    return render_template('error.html',**kwargs)
+    """ Return the error page """
+    kwargs['img'] = random.choice(SAD_BABIES)
+    return render_template('error.html', **kwargs)
 
-@app.route('/upload',methods=['GET','POST'])
+@app.route('/upload', methods=['GET', 'POST'])
 def upload_file():
+    """ Handle file uploading to the server """
 
     # get (or make) the session id
     manage_session()
@@ -149,19 +184,19 @@ def upload_file():
     
     if request.method == 'POST':
         project = request.files.keys()[0]
-        f       = request.files[project]
+        file_obj = request.files[project]
         
         # check the file extension
-        allowed, ext, error = allowed_file(f.filename)
+        allowed, ext, error = allowed_file(file_obj.filename)
         
         if allowed:
             
-            filename = secure_filename(f.filename)
-            save_to  = os.path.join(config.UPLOAD_FOLDER, '%sdata_session%s.fits'%(project,s_id))
-            f.save(save_to)
+            name = '%sdata_session%s.fits'%(project, s_id)
+            save_to = os.path.join(config.UPLOAD_FOLDER, name)
+            file_obj.save(save_to)
             
             # get the appropriate backend
-            if project in ('cdi','fth'):
+            if project in ('cdi', 'fth'):
                 backend = sessions[s_id]['backendi']
                 backend_id = 'imaging'
                 
@@ -173,9 +208,8 @@ def upload_file():
             # check if the data is ok. if yes, load it into the backend.
             # then, redirect the web browswer to the project page.
             checked, error = backend.check_data(save_to)
-            print checked, error
             if checked:
-                backend.load_data(project,save_to)
+                backend.load_data(project, save_to)
                 return redirect('/'+project)
             
         # if we're here, there was an error with the data. do three things
@@ -185,59 +219,71 @@ def upload_file():
         if error != None:
             
             # 1. save the data
-            new_name = save_to.replace('.fits','_crashed.fits')
-            os.rename(save_to,new_name)
+            new_name = save_to.replace('.fits', '_crashed.fits')
+            os.rename(save_to, new_name)
             
             # 2. write the error message to a file
             import datetime
-            with open("data/crash_log.txt","a") as f:
-                message = "time: %s\nfile: %s\naddress: %s\nbackend: %s\nmessage: %s\n\n"%(datetime.datetime.today(), new_name, request.remote_addr, backend_id, error)
-                f.write(message)
-                f.close()
+            with open("data/crash_log.txt", "a") as crash_file:
+                msg = "time: %s\n"%datetime.datetime.today()
+                msg += "file: %s\n"%new_name
+                msg += "address: %s\n"%request.remote_addr
+                msg += "backend: %s\n"%backend_id
+                msg += "message: %s\n\n"%error
+                crash_file.write(msg)
+                crash_file.close()
 
             # 3. send the user to the error page
-            kwargs = {'error':error,'backend':backend_id,'occasion':"checking the uploaded data","img":random.choice(sadbabies)}
-            kwargs['img'] = random.choice(sadbabies)
-            return render_template('error.html',**kwargs)
+            kwargs = {'error':error, 'backend':backend_id, \
+                      'occasion':"checking the uploaded data",\
+                      "img":random.choice(SAD_BABIES)}
+
+            return render_template('error.html', **kwargs)
 
 # the rest of the decorators are switchboard functions which take a request
 # and send it to the correct backend
 @app.route('/')
 def serve_landing():
-    # now send the landing page
+    """ Return the landing page """
     manage_session()
-    return send_from_directory(".","static/html/landing.html")
+    return send_from_directory(".", "static/html/landing.html")
 
-@app.route('/error',methods=['GET',])
+@app.route('/error', methods=['GET',])
 def serve_error():
+    """ Return the error page """
     kwargs = sessions[session['s_id']]['error_kwargs']
-    return render_template('error.html',**kwargs)
+    return render_template('error.html', **kwargs)
 
-@app.route('/filetree',methods=['POST',])
+@app.route('/filetree', methods=['POST',])
 def get_directory():
+    """ Return directory informatoin for the file tree"""
     manage_session()
-    from_backend = sessions[session['s_id']]['backendi'].listDirectory(request.json)
-    sessions[session['s_id']]['fileMirror'].update(from_backend['forMirror'])
-    del from_backend['forMirror']
+    backend = sessions[session['s_id']]['backendi']
+    from_backend = backend.list_directory(request.json)
+    sessions[session['s_id']]['file_mirror'].update(from_backend['for_mirror'])
+    del from_backend['for_mirror']
     return jsonify(**from_backend)
 
-@app.route('/remoteload',methods=['POST',])
+@app.route('/remoteload', methods=['POST',])
 def remote_load():
+    """ Take a filename from the file tree and copy
+    it to local if necessary """
     
-    def _manageFile():
-        fm = sessions[session['s_id']]['fileMirror']
+    def _manage_file():
+        """ Helper: handle filemirror in backend """
+        file_mirror = sessions[session['s_id']]['file_mirror']
         
         # if the requested file doesn't exist, make a copy
         jname = request.json['fileName']
 
-        rname = fm[jname]['path']
-        lname = rname.replace(config.DATA_ROOT,config.DATA_MIRROR)
+        rname = file_mirror[jname]['path']
+        lname = rname.replace(config.DATA_ROOT, config.DATA_MIRROR)
         
         # copy the file from remote to local
-        if not fm[jname]['local']:
+        if not file_mirror[jname]['local']:
             print "not local; copying"
-            backend.mirrorFile(rname,lname)
-            fm[jname]['local'] = True
+            backend.mirror_file(rname, lname)
+            file_mirror[jname]['local'] = True
 
         return lname
 
@@ -245,42 +291,51 @@ def remote_load():
     project = request.json['project']
     
     # get the backend
-    backend  = get_backend(project)
+    backend = get_backend(project)
+    backendi = get_backend('fth') 
     
     # figure out where the file is, and if we need to create a local copy
-    localFileName = _manageFile()
+    local_file_name = _manage_file()
     
     # check the data. if it seems OK, load it
     # and redirect to the project page.
-    checked, error = backend.check_data(localFileName)
+    checked, error = backend.check_data(local_file_name)
     if checked:
-        backend.load_data(project,localFileName)
+        backend.load_data(project, local_file_name)
         print "redirecting to %s"%project
         return jsonify(**{'redirect':'/'+project})
     
     else:
-        sessions[session['s_id']]['error_kwargs'] = {'error':error,'backend':project,'occasion':"checking the uploaded data",'img':random.choice(sadbabies)}
+        
+        kwargs = {'error':error, 'backend':project,
+                  'occasion':"checking the uploaded data",
+                  'img':random.choice(SAD_BABIES)}
+        
+        sessions[session['s_id']]['error_kwargs'] = kwargs
+        
         return jsonify(**{'redirect':'/error'})
     
-@app.route('/<project>',methods=['GET',])
+@app.route('/<project>', methods=['GET',])
 def serve_project(project):
+    """ Send back the project page """
 
-    if project not in projects:
-        print projects
-        kwargs = {'error':"invalid project %s"%project,"occasion":"loading a project"}
+    if project not in PROJECTS:
+        kwargs = {'error':"invalid project %s"%project, \
+                  "occasion":"loading a project"}
         return error_page(kwargs)
     
     if project == 'xpcs':
         try:
             sessions[session['s_id']]['backendx'].regions = {}
         except KeyError:
-            kwargs = {'error':'expired session','occasion':"loading a project"}
+            kwargs = {'error':'expired session', 'occasion':"loading a project"}
             return error_page(kwargs)
         
-    return send_from_directory(".","static/html/%s.html"%project)
+    return send_from_directory(".", "static/html/%s.html"%project)
 
-@app.route('/<project>/<cmd>',methods=['GET','POST'])
-def dispatch_cmd(project,cmd):
+@app.route('/<project>/<cmd>', methods=['GET', 'POST'])
+def dispatch_cmd(project, cmd):
+    """ Send a command to the correct backend """
     
     print project, cmd
     
@@ -288,33 +343,36 @@ def dispatch_cmd(project,cmd):
     backend = get_backend(project)
     
     if backend == None:
-        error = "expired session"
-        kwargs = {'error':"expired session",'occasion':'executing a command'}
+        kwargs = {'error':"expired session", 'occasion':'executing a command'}
         return error_page(kwargs)
 
     try:
-        from_backend = backend.cmds[cmd](request.args,request.json,project)
+        from_backend = backend.cmds[cmd](request.args, request.json, project)
         return jsonify(**from_backend)
     
     except KeyError:
-        kwargs = {'error':"illegal command "+cmd,'occasion':occ}
+        occ = "executing command %s"%cmd
+        kwargs = {'error':"illegal command "+cmd, 'occasion':occ}
         return error_page(kwargs)
-    
+
 @app.route('/<path:x>/sadbaby<int:y>.jpg')
-def serve_sad_baby(x,y):
-    return send_from_directory('.','static/error/sadbaby%s.jpg'%y)
+def serve_sad_baby(x, y):
+    """ Send a sadbaby photo """
+    return send_from_directory('.', 'static/error/sadbaby%s.jpg'%y)
         
-allowed_exts  = config.ALLOWED_EXTS
+ALLOWED_EXTS = config.ALLOWED_EXTS
 app.config['UPLOAD_FOLDER'] = config.UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
 
 # for session management
-import os
 app.secret_key = os.urandom(24)
 app.permanent_session_lifetime = timedelta(minutes=60*8)
 
 if __name__ == '__main__':
-    sadbabies = glob.glob('static/error/sadbaby*.jpg')
-    projects  = [x.split('/')[-1].split('.html')[0] for x in glob.glob('static/html/*.html')]
+    SAD_BABIES = glob.glob('static/error/sadbaby*.jpg')
+    
+    PROJECTS = [count_file.split('/')[-1].split('.html')[0]\
+                for count_file in glob.glob('static/html/*.html')]
+    
     app.run(host="0.0.0.0")
     
