@@ -579,7 +579,7 @@ function draggableRegionColor(where,sizes) {
 
 // object for rastering backgrounds such as that seen in back propagation
 // no current need for subclassing
-function rasterBackground(where,sizeX,sizeY) {
+function rasterBackground(where, sizeX, sizeY) {
     
     this.name  = where
     this.sizeX = sizeX

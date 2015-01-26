@@ -290,8 +290,9 @@ var start = function () {
     function startIntensity() {
 	
 	// instantiate the draggable background
-	var dbg = new draggableBackground(i,gui.sizes.window,gui.sizes.window),
-	    i   = "intensity";
+	var i   = "intensity",
+	    dbg = new draggableBackground(i,gui.sizes.window,gui.sizes.window)
+	    ;
 	gui.components[i].background = dbg;
 	gui.components[i].isLocked = false;
 	dbg.draw()

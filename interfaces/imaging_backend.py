@@ -343,8 +343,8 @@ class Backend(BasicBackend):
         data, mask = _embed(dat, params['apodize'])
 
         # propagate and calculate acutance. normalize the acutance to max = 1
-        func = propagate.propagate_distances
-        self.propagated, self.p_images = func(data, zrange*1e-6, energy, pitch,
+        prop = propagate.propagate_distances
+        self.propagated, self.p_images = prop(data, zrange*1e-6, energy, pitch,
                                               subregion=subreg, im_convert=True,
                                               silent=False, gpu_info=self.gpu)
         

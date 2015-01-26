@@ -99,7 +99,7 @@ var guiFunctions = {
 		var gcp  = gui.components.propagation,
 		    gcpb = gui.components.propagation.background;
 		gui.data.propagationId = json.propagationId;
-		gcpb.frameSize         = json.frameSize;
+		gcpb.frameSize         = json.frame_size;
 		callback(null)
 	    }
 	    
@@ -160,7 +160,9 @@ var guiFunctions = {
 	    gui.unlock()
 	}
 
-	if (_validateAndFormat().check) {queue().defer(_backend).await(_frontend)}
+	info = _validateAndFormat()
+	
+	if (info.check) {queue().defer(_backend).await(_frontend)}
 	else {alert("This is an error in the propagation parameters")}
     },
 }

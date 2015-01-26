@@ -119,7 +119,7 @@ def manage_session():
     
         # store these here in python; can't be serialized into the cookie!
         sessions[s_id] = {}
-        sessions[s_id]['fileMirror'] = {}
+        sessions[s_id]['file_mirror'] = {}
         sessions[s_id]['backendx'] = backendx
         sessions[s_id]['backendi'] = backendi
         sessions[s_id]['last'] = time.time()

@@ -315,12 +315,12 @@ var guiFunctions = {
 	    
 	    function _backend() {
 		var url = "cdi/reconstruct"
-		$.getJSON(url, params, frontend)
+		$.getJSON(url, params, _frontend)
 	    };
 
 	    if (params.check) {
 		if (currentRound === 0) {gui.lock();} // unlock at end of runRounds
-		backend();
+		_backend();
 		}
 	}
 	
