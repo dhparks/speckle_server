@@ -151,7 +151,7 @@ var guiFunctions = {
 	    
 	    function _onSuccess(json) {
 		gui.data.propagationId   = json.propagationId;
-		gcp.background.frameSize = json.frameSize;
+		gcp.background.frameSize = json.frame_size;
 		callback(null);
 	    };
 	    
@@ -199,8 +199,9 @@ var guiFunctions = {
 	var gca = gui.components.acutance,
 	    gcp = gui.components.propagation,
 	    gcr = gui.components.reconstruction;
+	    info = _validateAndFormat()
 	
-	if (_validateAndFormat().check) {queue().defer(_backend).await(_frontend)}
+	if (info.check) {queue().defer(_backend).await(_frontend)}
     },
     
     reconstruct: function (args) {
@@ -282,7 +283,7 @@ var guiFunctions = {
 		    // decide if we need to send another backend command
 		    currentRound += 1;
 		    gcr.round    += 1;
-		    if (currentRound < params.rounds) { backend(); }
+		    if (currentRound < params.rounds) { _backend(); }
 		    else {gui.unlock()}
 		}
 		
@@ -300,7 +301,7 @@ var guiFunctions = {
 		    img1.onload = function () {loaded += 1; if (loaded == 2) {callback(null)}};
 		    img2.onload = function () {loaded += 1; if (loaded == 2) {callback(null)}};
 		    img1.src = path;
-		    img2.src = path.replace("linr","sqrt");
+		    img2.src = path.replace("linr", "sqrt");
 		};
 
 		// after a successfull reconstruction, do the following:
