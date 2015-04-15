@@ -37,6 +37,7 @@ class BasicBackend(object):
             self.use_gpu = True
             self.gpu = gpu_info
         else:
+            self.gpu = None
             self.use_gpu = False
 
     def _new_id(self):
